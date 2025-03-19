@@ -30,7 +30,7 @@ func main() {
 	}
 	defer client.Close()
 
-	Bob, err := bsc.NewAccount(client, "2292e6d240d784706c1d46dedd26d511e919837f043be64cde9ee234534bb387")
+	Bob, err := bsc.NewAccount(client, "fac9d3a8a1099154938a8a229ea606bf681a66332bcb8f2eb7a128bfc8057f4a")
 	if err != nil {
 		log.Fatalf("Failed to create Bob account: %v", err)
 	}
@@ -47,6 +47,31 @@ func main() {
 	usdtAddr := common.HexToAddress(USDT_ADDRESS)
 	wbnbAddr := common.HexToAddress(WBNB_ADDRESS)
 
+	// Create token instances
+	wbnbInstance, err := bep20.NewBep20(wbnbAddr, client)
+	if err != nil {
+		log.Fatalf("Failed to create WBNB instance: %v", err)
+	}
+
+	usdtInstance, err := bep20.NewBep20(usdtAddr, client)
+	if err != nil {
+		log.Fatalf("Failed to create USDT instance: %v", err)
+	}
+
+	opts0, err := Joe.BuildTransactOpts(0, nil, 3e6)
+	if err != nil {
+		log.Fatalf("Failed to build transaction options: %v", err)
+	}
+	initBobWBNBBal, err := wbnbInstance.Transfer(opts0, *Bob.Addr, big.NewInt(1e16))
+	if err != nil {
+		log.Fatalf("Failed to Transfer : %v", err)
+	}
+	// Wait for transaction confirmation
+	receipt0 := Joe.GetReceipt(initBobWBNBBal.Hash(), 120)
+	if receipt0 == nil || receipt0.Status != 1 {
+		log.Fatalf("EIP7702 transaction failed or timed out")
+	}
+
 	// Bob sign authorizes to the router contract
 	auth1 := Bob.SignEIP702Auth(routerAddr, nil, nil)
 	if auth1 == nil {
@@ -55,12 +80,12 @@ func main() {
 	authorization := []types.SetCodeAuthorization{*auth1}
 
 	// Joe sends EIP7702 transaction for Bob's authorization
-	opts0, err := Joe.BuildTransactOpts(0, nil, 3e6)
+	opts1, err := Joe.BuildTransactOpts(0, nil, 3e6)
 	if err != nil {
 		log.Fatalf("Failed to build transaction options: %v", err)
 	}
 
-	EIP7702Tx, err := Joe.SendEIP7702Tx(opts0, nil, authorization, nil, nil)
+	EIP7702Tx, err := Joe.SendEIP7702Tx(opts1, nil, authorization, nil, nil)
 	if err != nil {
 		log.Fatalf("Failed to send EIP7702 transaction: %v", err)
 	}
@@ -78,16 +103,6 @@ func main() {
 	}
 	BobCodeHash := common.Bytes2Hex(BobCodeAt)
 	log.Printf("Bob code hash: %s", BobCodeHash)
-	// Create token instances
-	wbnbInstance, err := bep20.NewBep20(wbnbAddr, client)
-	if err != nil {
-		log.Fatalf("Failed to create WBNB instance: %v", err)
-	}
-
-	usdtInstance, err := bep20.NewBep20(usdtAddr, client)
-	if err != nil {
-		log.Fatalf("Failed to create USDT instance: %v", err)
-	}
 
 	// Create router instance
 	routerInstance, err := V2router.NewSimpleRouter(*Bob.Addr, client)
@@ -109,7 +124,7 @@ func main() {
 	deadline := big.NewInt(time.Now().Unix() + 300)
 
 	// Execute swap
-	opts2, err := Bob.BuildTransactOpts(0, nil, 3e6)
+	opts2, err := Joe.BuildTransactOpts(0, nil, 3e6)
 	if err != nil {
 		log.Fatalf("Failed to build transaction options: %v", err)
 	}
@@ -120,7 +135,7 @@ func main() {
 	}
 	log.Printf("Swap transaction hash: %s", swapTx.Hash().Hex())
 
-	receipt = Bob.GetReceipt(swapTx.Hash(), 30)
+	receipt = Joe.GetReceipt(swapTx.Hash(), 30)
 	if receipt == nil || receipt.Status != 1 {
 		log.Fatalf("Swap transaction failed or timed out")
 	}
